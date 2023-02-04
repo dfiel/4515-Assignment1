@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <item
+        android:id="@+id/menuStartConvoy"
+        android:icon="@android:drawable/ic_menu_myplaces"
+        android:title="Start Convoy"
+        app:showAsAction="always" />
+    <item
+        android:id="@+id/menuJoinConvoy"
+        android:icon="@android:drawable/ic_dialog_map"
+        android:title="Join Convoy"
+        app:showAsAction="always" />
+    <item
+        android:id="@+id/menuLeaveConvoy"
+        android:icon="@android:drawable/ic_menu_close_clear_cancel"
+        android:title="Leave Convoy"
+        app:showAsAction="always" />
+    <item
+        android:id="@+id/menuLogout"
+        android:icon="@drawable/common_full_open_on_phone"
+        android:title="Logout"
+        app:showAsAction="never" />
+</menu>
