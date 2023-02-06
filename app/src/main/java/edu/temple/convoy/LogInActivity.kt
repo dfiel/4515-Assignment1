@@ -40,34 +40,30 @@ class LogInActivity : AppCompatActivity() {
     }
 
     @SuppressLint("ApplySharedPref")
-    private suspend fun login() {
-        withContext(Dispatchers.IO) {
-            val form = FormBody.Builder()
-                .add("action", "LOGIN")
-                .add("username", etxtUsername.text.toString())
-                .add("password", etxtPassword.text.toString())
-                .build()
-            val request = Request.Builder()
-                .url(MainActivity.ACCOUNT_URL)
-                .post(form)
-                .build()
-            val response = client.newCall(request).execute()
-            if (response.code == 200) {
-                val body = response.body!!.string()
-                Log.d("Request Response", body)
-                val json = JSONObject(body)
-                if (json.getString("status") != "SUCCESS") return@withContext
-                prefs.edit()
-                    .putString(MainActivity.DATA_USERNAME, etxtUsername.text.toString())
-                    .putString(MainActivity.DATA_FIRSTNAME, json.getString("firstname"))
-                    .putString(MainActivity.DATA_LASTNAME, json.getString("lastname"))
-                    .putString(MainActivity.DATA_SESSION, json.getString("session_key"))
-                    .putBoolean(MainActivity.DATA_LOGGEDIN, true)
-                    .commit()
-                returnIntent.action = RESULT_STRING
-                setResult(RESULT_OK, returnIntent)
-                finish()
-            }
+    private fun login() {
+        val form = FormBody.Builder()
+            .add("action", "LOGIN")
+            .add("username", etxtUsername.text.toString())
+            .add("password", etxtPassword.text.toString())
+            .build()
+        val request = Request.Builder()
+            .url(MainActivity.ACCOUNT_URL)
+            .post(form)
+            .build()
+        val response = client.newCall(request).execute()
+        if (response.code == 200) {
+            val body = response.body!!.string()
+            Log.d("Request Response", body)
+            val json = JSONObject(body)
+            if (json.getString("status") != "SUCCESS") return
+            prefs.edit()
+                .putString(MainActivity.DATA_USERNAME, etxtUsername.text.toString())
+                .putString(MainActivity.DATA_SESSION, json.getString("session_key"))
+                .putBoolean(MainActivity.DATA_LOGGEDIN, true)
+                .commit()
+            returnIntent.action = RESULT_STRING
+            setResult(RESULT_OK, returnIntent)
+            finish()
         }
     }
 }

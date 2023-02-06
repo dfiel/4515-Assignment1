@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Convoy</string>
+    <string name="convoy_id">Convoy ID: \n %1$s</string>
 </resources>
