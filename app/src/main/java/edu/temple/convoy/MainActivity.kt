@@ -3,9 +3,7 @@ package edu.temple.convoy
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.ActivityManager
-import android.content.Context
-import android.content.Intent
-import android.content.SharedPreferences
+import android.content.*
 import android.content.pm.PackageManager
 import android.location.Location
 import android.location.LocationListener
@@ -13,6 +11,7 @@ import android.location.LocationManager
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.os.Handler
+import android.os.IBinder
 import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
@@ -64,7 +63,6 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
     }
 
     private lateinit var prefs: SharedPreferences
-    lateinit var locationListener: LocationListener
     lateinit var fusedLocationClient: FusedLocationProviderClient
     lateinit var mapView: MapView
     lateinit var googleMap: GoogleMap
@@ -75,6 +73,28 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
     private var mapInit = false
     private lateinit var txtConvoyID: TextView
     private lateinit var btnEndConvoy: FloatingActionButton
+    private var serviceBinder: LocationService.LocationBinder? = null
+
+    private val serviceConnection = object : ServiceConnection {
+        override fun onServiceConnected(p0: ComponentName?, p1: IBinder?) {
+            serviceBinder = p1 as LocationService.LocationBinder
+            serviceBinder!!.setLocationCallback {
+                if (previousLocation != null) {
+                    distanceTraveled += it.distanceTo(previousLocation!!)
+
+                    val latLng = LatLng(it.latitude, it.longitude)
+                    marker.position = latLng
+                    googleMap.animateCamera(CameraUpdateFactory.newLatLngZoom(latLng, 16f))
+                }
+                previousLocation = it
+            }
+        }
+
+        override fun onServiceDisconnected(p0: ComponentName?) {
+            serviceBinder = null
+        }
+
+    }
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -115,18 +135,9 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
         }
         MapsInitializer.initialize(this, MapsInitializer.Renderer.LATEST) {mapView.getMapAsync(this)}
 
-        locationListener = LocationListener {
-            if (previousLocation != null) {
-                distanceTraveled += it.distanceTo(previousLocation!!)
-
-                val latLng = LatLng(it.latitude, it.longitude)
-                marker.position = latLng
-                googleMap.animateCamera(CameraUpdateFactory.newLatLngZoom(latLng, 16f))
-            }
-            previousLocation = it
-        }
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
         fusedLocationClient.lastLocation.addOnSuccessListener {
+            if (it == null) return@addOnSuccessListener
             val latLng = LatLng(it.latitude, it.longitude)
             googleMap.clear()
             marker = googleMap.addMarker(MarkerOptions().position(latLng).draggable(false))!!
@@ -211,14 +222,16 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
     }
 
     private fun startLocationService() {
-        startService(Intent(this, LocationService::class.java))
+        val serviceIntent = Intent(this, LocationService::class.java)
+        startService(serviceIntent)
+        bindService(serviceIntent, serviceConnection, BIND_IMPORTANT)
         Log.d("Main", "Location Service running: ${isMyServiceRunning(LocationService::class.java)}")
-        Handler().postDelayed({Log.d("Main", "Location Service running: ${isMyServiceRunning(LocationService::class.java)}")}, 500)
     }
 
     private fun stopLocationService() {
+        serviceBinder?.clearLocationCallback()
+        unbindService(serviceConnection)
         startService(Intent(this, LocationService::class.java).apply { action = LocationService.ACTION_STOP })
-        Handler().postDelayed({Log.d("Main", "Location Service running: ${isMyServiceRunning(LocationService::class.java)}")}, 500)
     }
 
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
@@ -243,7 +256,6 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
             startActivity(Intent(this, AuthActivity::class.java))
         }
         if (!mapInit) initializeMaps()
-        doGPSStuff()
         mapView.onResume()
     }
 
@@ -251,12 +263,6 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
         googleMap = p0
     }
 
-    @SuppressLint("MissingPermission")
-    private fun doGPSStuff() {
-        return
-        if (permissionGranted())
-            locationManager.requestLocationUpdates(LocationManager.FUSED_PROVIDER, 1000.toLong(), 10f, locationListener)
-    }
 
     private fun permissionGranted () : Boolean {
         return checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
@@ -269,7 +275,6 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
 
     override fun onPause() {
         super.onPause()
-        locationManager.removeUpdates(locationListener)
         mapView.onPause()
     }
 

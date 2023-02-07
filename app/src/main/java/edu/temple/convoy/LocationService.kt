@@ -7,6 +7,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.location.Location
+import android.os.Binder
 import android.os.IBinder
 import android.os.Looper
 import android.util.Log
@@ -14,6 +15,16 @@ import androidx.core.app.NotificationCompat
 import com.google.android.gms.location.*
 
 class LocationService: Service() {
+
+    inner class LocationBinder : Binder() {
+        fun setLocationCallback(callback: ((Location)->Unit)){
+            appCallback = callback
+        }
+
+        fun clearLocationCallback() {
+            appCallback = null
+        }
+    }
     companion object {
         const val  ACTION_STOP =  "${BuildConfig.APPLICATION_ID}.stop"
     }
@@ -26,8 +37,15 @@ class LocationService: Service() {
     private lateinit var locationCallback: LocationCallback
     private lateinit var lastLocation: Location
     private lateinit var fusedLocationClient: FusedLocationProviderClient
+    private val binder = LocationBinder()
+    private var appCallback: ((Location)->Unit)? = null
     override fun onBind(p0: Intent?): IBinder? {
-        return null
+        return binder
+    }
+
+    override fun onUnbind(intent: Intent?): Boolean {
+        appCallback = null
+        return super.onUnbind(intent)
     }
 
     @SuppressLint("MissingPermission")
@@ -49,6 +67,7 @@ class LocationService: Service() {
                 Log.d("LocationService", "Location update received")
                 lastLocation = p0.locations.first()
                 startForeground(mNotificationId, createNotification())
+                appCallback?.invoke(lastLocation)
             }
         }
         locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 5000)
