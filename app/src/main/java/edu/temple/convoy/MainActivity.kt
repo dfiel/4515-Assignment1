@@ -2,6 +2,8 @@ package edu.temple.convoy
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.ActivityManager
+import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
@@ -10,6 +12,7 @@ import android.location.LocationListener
 import android.location.LocationManager
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
+import android.os.Handler
 import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
@@ -25,6 +28,7 @@ import com.google.android.gms.maps.MapView
 import com.google.android.gms.maps.MapsInitializer
 import com.google.android.gms.maps.OnMapReadyCallback
 import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.Marker
 import com.google.android.gms.maps.model.MarkerOptions
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import kotlinx.coroutines.CoroutineScope
@@ -55,12 +59,16 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
     val locationManager : LocationManager by lazy {
         getSystemService(LocationManager::class.java)
     }
+    val activityManager : ActivityManager by lazy {
+        getSystemService(ActivityManager::class.java)
+    }
 
     private lateinit var prefs: SharedPreferences
     lateinit var locationListener: LocationListener
     lateinit var fusedLocationClient: FusedLocationProviderClient
     lateinit var mapView: MapView
     lateinit var googleMap: GoogleMap
+    lateinit var marker: Marker
     var previousLocation : Location? = null
     var distanceTraveled = 0f
     private val client = OkHttpClient()
@@ -103,6 +111,7 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
         if (mapInit) return
         if (!permissionGranted()) {
             requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), 123)
+            return
         }
         MapsInitializer.initialize(this, MapsInitializer.Renderer.LATEST) {mapView.getMapAsync(this)}
 
@@ -111,8 +120,7 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
                 distanceTraveled += it.distanceTo(previousLocation!!)
 
                 val latLng = LatLng(it.latitude, it.longitude)
-                googleMap.clear()
-                googleMap.addMarker(MarkerOptions().position(latLng))
+                marker.position = latLng
                 googleMap.animateCamera(CameraUpdateFactory.newLatLngZoom(latLng, 16f))
             }
             previousLocation = it
@@ -121,7 +129,7 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
         fusedLocationClient.lastLocation.addOnSuccessListener {
             val latLng = LatLng(it.latitude, it.longitude)
             googleMap.clear()
-            googleMap.addMarker(MarkerOptions().position(latLng).draggable(false))
+            marker = googleMap.addMarker(MarkerOptions().position(latLng).draggable(false))!!
             googleMap.animateCamera(CameraUpdateFactory.newLatLngZoom(latLng, 16f))
             previousLocation = it
         }
@@ -155,6 +163,7 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
                     txtConvoyID.text = getString(R.string.convoy_id, json.getString(DATA_CONVOYID))
                     txtConvoyID.visibility = View.VISIBLE
                     btnEndConvoy.visibility = View.VISIBLE
+                    startLocationService()
                 }
                 prefs.edit()
                     .putString(DATA_CONVOYID, json.getString(DATA_CONVOYID))
@@ -191,6 +200,7 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
                 withContext(Dispatchers.Main) {
                     txtConvoyID.visibility = View.INVISIBLE
                     btnEndConvoy.visibility = View.INVISIBLE
+                    stopLocationService()
                 }
                 prefs.edit()
                     .putBoolean(DATA_INCONVOY, false)
@@ -198,6 +208,17 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
                     .apply()
             }
         }
+    }
+
+    private fun startLocationService() {
+        startService(Intent(this, LocationService::class.java))
+        Log.d("Main", "Location Service running: ${isMyServiceRunning(LocationService::class.java)}")
+        Handler().postDelayed({Log.d("Main", "Location Service running: ${isMyServiceRunning(LocationService::class.java)}")}, 500)
+    }
+
+    private fun stopLocationService() {
+        startService(Intent(this, LocationService::class.java).apply { action = LocationService.ACTION_STOP })
+        Handler().postDelayed({Log.d("Main", "Location Service running: ${isMyServiceRunning(LocationService::class.java)}")}, 500)
     }
 
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
@@ -210,7 +231,7 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
             R.id.menuLogout -> logout()
             R.id.menuStartConvoy -> startConvoy()
             R.id.menuJoinConvoy -> Toast.makeText(this, "Join Convoy", Toast.LENGTH_SHORT).show()
-            R.id.menuLeaveConvoy -> Toast.makeText(this, "Leave Convoy", Toast.LENGTH_SHORT).show()
+            R.id.menuLeaveConvoy -> endConvoy(); //Toast.makeText(this, "Leave Convoy", Toast.LENGTH_SHORT).show()
         }
         return super.onOptionsItemSelected(item)
     }
@@ -277,6 +298,7 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
             if (grantResults[0] != PackageManager.PERMISSION_GRANTED) {
                 Toast.makeText(this, "Location Permissions Required", Toast.LENGTH_LONG).show()
             }
+            initializeMaps()
         }
 
     }
@@ -301,7 +323,6 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
                     withContext(Dispatchers.Main) {
                         Toast.makeText(this@MainActivity, "Logout Failed", Toast.LENGTH_LONG).show()
                     }
-                    return@launch
                 }
                 prefs.edit()
                     .clear()
@@ -310,5 +331,20 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
                 startActivity(Intent(this@MainActivity, AuthActivity::class.java))
             }
         }
+    }
+
+    private fun isMyServiceRunning(serviceClass: Class<*>): Boolean {
+        try {
+            for (service in activityManager.getRunningServices(
+                Int.MAX_VALUE
+            )) {
+                if (serviceClass.name == service.service.className) {
+                    return true
+                }
+            }
+        } catch (e: Exception) {
+            return false
+        }
+        return false
     }
 }
